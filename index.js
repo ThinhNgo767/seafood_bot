@@ -6,9 +6,9 @@ const fs = require("fs");
 const { createCanvas } = require("canvas");
 
 const token = process.env.BOT_TOKEN;
-const bot = new TelegramBot(token, { webHook: true });
+// const bot = new TelegramBot(token, { webHook: true });
 
-// const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(token, { polling: true });
 const app = express();
 app.use(bodyParser.json());
 
@@ -378,6 +378,15 @@ function createTableImageListExpense(records) {
   return canvas.toBuffer(); // Trả về buffer ảnh
 }
 
+bot.onText(/\@seafood_accountant_bot/, (msg) => {
+  const chatId = msg.chat.id;
+  const userName = msg.from.first_name || "Người dùng";
+  const welcomeMessage = `\nCái lề gì thốn *${userName}*\\? bố mày đây\\.\nChú em mày gọi anh có gì không nào? nói đi\\! `;
+  bot.sendMessage(chatId, welcomeMessage, {
+    parse_mode: "MarkdownV2",
+  });
+});
+
 // Xử lý lệnh /addca
 bot.onText(/\/addca(.*)/, (msg, match) => {
   const chatId = msg.chat.id;
@@ -481,6 +490,17 @@ bot.onText(/\/check/, (msg) => {
     return;
   }
 
+  const replyKeyboard = {
+    reply_markup: {
+      keyboard: [
+        [{ text: "/total" }], // Nút này sẽ gửi lệnh /total
+        [{ text: "/img" }], // Ví dụ một nút khác để gửi lệnh /images
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: true, // Bàn phím sẽ ẩn sau khi sử dụng
+    },
+  };
+
   // Tạo chuỗi phản hồi cho Ca
   let responseCa = "<b>Thông tin sổ bạn như sau:</b>\n\n";
   if (!groupRecordsCa[chatId] || groupRecordsCa[chatId].length === 0) {
@@ -518,7 +538,10 @@ bot.onText(/\/check/, (msg) => {
   const finalResponse = `${responseCa}\n${responsePhi}`;
 
   // Gửi phản hồi lại toàn bộ thông tin
-  bot.sendMessage(chatId, finalResponse, { parse_mode: "HTML" });
+  bot.sendMessage(chatId, finalResponse, {
+    parse_mode: "HTML",
+    reply_markup: replyKeyboard.reply_markup,
+  });
 });
 
 //xử lí lệnh /total
