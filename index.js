@@ -606,6 +606,7 @@ bot.onText(/\/clear/, (msg) => {
   const chatId = msg.chat.id;
 
   groupRecordsCa[chatId] = [];
+  groupRecordsPhi[chatId] = [];
 
   bot.sendMessage(chatId, `<i>Sổ của bạn đã được xóa</i>`, {
     parse_mode: "HTML",
