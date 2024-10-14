@@ -1,7 +1,6 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const TelegramBot = require("node-telegram-bot-api");
-const moment = require("moment"); // Để lấy thời gian hiện tại
 require("dotenv").config();
 const { createCanvas } = require("canvas");
 
@@ -388,7 +387,8 @@ bot.onText(/\/addca(.*)/, (msg, match) => {
   }
 
   // Lấy thời gian hiện tại
-  const time = moment().format("HH:mm:ss");
+  const now = new Date();
+  const time = now.toLocaleTimeString("vi-VN");
 
   if (!groupRecordsCa[chatId]) {
     groupRecordsCa[chatId] = [];
