@@ -1,14 +1,36 @@
+const express = require("express");
+const bodyParser = require("body-parser");
 const TelegramBot = require("node-telegram-bot-api");
 const moment = require("moment"); // Để lấy thời gian hiện tại
 require("dotenv").config();
+const { createCanvas } = require("canvas");
 
 const token = process.env.BOT_TOKEN;
-const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(token, { webHook: true });
+
+const app = express();
+app.use(bodyParser.json());
+
+app.get(`/${token}`, (req, res) => {
+  res.send(`6789`);
+});
+
+app.post(`/${token}`, (req, res) => {
+  console.log("Webhook received:", req.body);
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
 
 const commands = [
   { command: "start", description: "Bắt đầu sử dụng bot" },
-  { command: "check", description: "Xem danh sách ca đã lưu" },
-  { command: "total", description: "Xem tổng số tiền sổ đã thu" },
+  { command: "check", description: "Xem danh sách ca và chi phí đã lưu" },
+  { command: "total", description: "Xem tổng số tiền sổ thu chi hiện tại" },
+  { command: "img", description: "Xuất thông tin ca và chi phí thành ảnh" },
   { command: "clear", description: "Xóa sổ kế toán đã lưu" },
 ];
 
@@ -23,15 +45,12 @@ async function setCommands() {
 
 setCommands();
 
-bot.on("polling_error", (error) => {
-  console.log("Lỗi polling:", error);
-});
-
-let groupRecords = {};
+let groupRecordsCa = {};
+let groupRecordsPhi = {};
 
 // Hàm xử lý cú pháp tin nhắn
-const parseAddCommand = (msgText) => {
-  const regex = /\/add (\w+)(.*)/;
+const parseAddCaCommand = (msgText) => {
+  const regex = /\/addca (\w+)(.*)/;
   const match = msgText.match(regex);
 
   if (!match) return null; // Không khớp cú pháp cơ bản
@@ -52,20 +71,318 @@ const parseAddCommand = (msgText) => {
 
   return { name, ca, lai, khac };
 };
+const parseAddPhiCommand = (msgText) => {
+  const regex = /\/addphi\s+(.+),(\d+)/; // Cú pháp như: /addphi nước ngọt,200
+  const match = msgText.match(regex);
 
-// Xử lý lệnh /add
-bot.onText(/\/add(.*)/, (msg, match) => {
+  if (!match) return null; // Nếu cú pháp không đúng, trả về null
+
+  const name = match[1]; // Tên chi phí
+  const amount = parseInt(match[2], 10); // Số tiền
+
+  return { name, amount };
+};
+const calculateTotal = (records) => {
+  let total = 0;
+  if (!records || records.length === 0) return;
+  records.forEach((record) => {
+    total += record.amount;
+  });
+  return total;
+};
+// hàm vẽ bảng ca
+// function createTableImageListSeaFood(records) {
+//   const columns = 6; // Số lượng cột cố định (STT, Tên, Ca, Lai, Khác, Thời gian)
+//   const header = [
+//     "STT",
+//     "TÊN",
+//     "TIỀN CA",
+//     "TIỀN LAI",
+//     "TIỀN KHÁC",
+//     "GIỜ VÀO SỔ",
+//   ]; // Tiêu đề của bảng
+//   const totals = records.reduce(
+//     (acc, record) => {
+//       acc.ca += record.ca;
+//       acc.lai += record.lai;
+//       acc.khac += record.khac;
+//       return acc;
+//     },
+//     { ca: 0, lai: 0, khac: 0 }
+//   );
+//   const footer = [
+//     "Tổng",
+//     ,
+//     totals.ca.toLocaleString("vi-VN"),
+//     totals.lai.toLocaleString("vi-VN"),
+//     totals.khac.toLocaleString("vi-VN"),
+//     "",
+//   ]; // Dữ liệu footer (có thể thêm tổng ở đây)
+//   const rows = records.length + 3; // Số hàng: bao gồm tiêu đề + dữ liệu + footer
+
+//   const cellWidth = 120;
+//   const cellHeight = 50;
+//   const canvasWidth = columns * cellWidth;
+//   const canvasHeight = rows * cellHeight;
+
+//   const canvas = createCanvas(canvasWidth, canvasHeight);
+//   const ctx = canvas.getContext("2d");
+
+//   // Vẽ nền
+//   ctx.fillStyle = "#fff";
+//   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+//   // Vẽ tiêu đề "Chi phí"
+//   ctx.fillStyle = "#000"; // Màu chữ
+//   ctx.font = "18px Arial"; // Cỡ chữ
+//   ctx.fillText("Sổ chi tiết ca", canvas.width / 2, 30);
+
+//   // Vẽ cuối dưới footer
+//   ctx.fillStyle = "#000"; // Màu chữ
+//   ctx.font = "18px Arial"; // Cỡ chữ
+//   ctx.fillText(
+//     `Thu về : ${
+//       totals.ca.toLocaleString("vi-VN") +
+//       totals.lai.toLocaleString("vi-VN") +
+//       totals.khac.toLocaleString("vi-VN")
+//     }, `,
+//     canvas.width / 2,
+//     30
+//   );
+
+//   // Vẽ bảng
+//   ctx.strokeStyle = "#000";
+//   ctx.lineWidth = 1;
+//   ctx.fillStyle = "#000"; // Màu chữ
+
+//   // Vẽ tiêu đề ở hàng đầu tiên (hàng 0)
+//   header.forEach((title, colIndex) => {
+//     const x = colIndex * cellWidth;
+//     const y = 50; // Hàng đầu tiên
+//     ctx.font = "bold 15px Arial";
+//     ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung
+//     ctx.fillText(title, x + 10, y + 30); // Vẽ tiêu đề
+//   });
+
+//   // Vẽ dữ liệu từ records
+//   records.forEach((record, rowIndex) => {
+//     const data = [
+//       (rowIndex + 1).toString(), // Số thứ tự (STT)
+//       record.name,
+//       record.ca.toLocaleString("vi-VN"),
+//       record.lai.toLocaleString("vi-VN"),
+//       record.khac.toLocaleString("vi-VN"),
+//       record.time,
+//     ];
+
+//     data.forEach((item, colIndex) => {
+//       const x = colIndex * cellWidth;
+//       const y = (rowIndex + 2) * cellHeight; // Hàng dữ liệu bắt đầu từ hàng 1
+//       ctx.font = "14px Arial";
+//       ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung
+//       ctx.fillText(item, x + 10, y + 30); // Vẽ dữ liệu
+//     });
+//   });
+
+//   // Vẽ footer ở hàng cuối cùng
+//   footer.forEach((footerItem, colIndex) => {
+//     const x = colIndex * cellWidth;
+//     const y = (rows - 1) * cellHeight; // Hàng cuối cùng
+//     ctx.fillStyle = "#FF0000";
+//     ctx.font = "bold 16px Arial";
+//     ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung
+//     ctx.fillText(footerItem, x + 10, y + 30); // Vẽ dữ liệu footer
+//   });
+
+//   return canvas.toBuffer(); // Trả về buffer ảnh
+// }
+function createTableImageListSeaFood(records) {
+  const columns = 6; // Số lượng cột cố định (STT, Tên, Ca, Lai, Khác, Thời gian)
+  const header = [
+    "STT",
+    "TÊN",
+    "TIỀN CA",
+    "TIỀN LAI",
+    "TIỀN KHÁC",
+    "GIỜ VÀO SỔ",
+  ]; // Tiêu đề của bảng
+
+  // Tính tổng các khoản tiền (ca, lai, khac)
+  const totals = records.reduce(
+    (acc, record) => {
+      acc.ca += record.ca;
+      acc.lai += record.lai;
+      acc.khac += record.khac;
+      return acc;
+    },
+    { ca: 0, lai: 0, khac: 0 }
+  );
+
+  // Dữ liệu footer (hiển thị tổng các khoản tiền và thu về)
+  const footer = [
+    "Tổng",
+    "",
+    totals.ca.toLocaleString("vi-VN"),
+    totals.lai.toLocaleString("vi-VN"),
+    totals.khac.toLocaleString("vi-VN"),
+    "",
+  ];
+
+  const rows = records.length + 3; // Số hàng: bao gồm tiêu đề + dữ liệu + footer
+
+  const cellWidth = 120;
+  const cellHeight = 50;
+  const canvasWidth = columns * cellWidth;
+  const canvasHeight = rows * cellHeight;
+
+  const canvas = createCanvas(canvasWidth, canvasHeight);
+  const ctx = canvas.getContext("2d");
+
+  // Vẽ nền trắng
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Vẽ tiêu đề "Sổ chi tiết ca"
+  ctx.fillStyle = "#000"; // Màu chữ
+  ctx.font = "18px Arial"; // Cỡ chữ
+  ctx.fillText("Sổ chi tiết ca", canvas.width / 2, 30); // Vẽ tiêu đề
+
+  // Vẽ bảng
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#000"; // Màu chữ
+
+  // Vẽ tiêu đề ở hàng đầu tiên (hàng 0)
+  header.forEach((title, colIndex) => {
+    const x = colIndex * cellWidth;
+    const y = 50; // Hàng đầu tiên
+    ctx.font = "bold 15px Arial";
+    ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung
+    ctx.fillText(title, x + 10, y + 30); // Vẽ tiêu đề
+  });
+
+  // Vẽ dữ liệu từ records (hàng 2 đến hàng cuối cùng)
+  records.forEach((record, rowIndex) => {
+    const data = [
+      (rowIndex + 1).toString(), // Số thứ tự (STT)
+      record.name,
+      record.ca.toLocaleString("vi-VN"),
+      record.lai.toLocaleString("vi-VN"),
+      record.khac.toLocaleString("vi-VN"),
+      record.time,
+    ];
+
+    data.forEach((item, colIndex) => {
+      const x = colIndex * cellWidth;
+      const y = (rowIndex + 2) * cellHeight; // Hàng dữ liệu bắt đầu từ hàng 2
+      ctx.font = "14px Arial";
+      ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung
+      ctx.fillText(item, x + 10, y + 30); // Vẽ dữ liệu
+    });
+  });
+
+  // Vẽ footer ở hàng cuối cùng
+  footer.forEach((footerItem, colIndex) => {
+    const x = colIndex * cellWidth;
+    const y = (rows - 1) * cellHeight; // Hàng cuối cùng
+    ctx.fillStyle = "#FF0000"; // Màu chữ footer
+    ctx.font = "bold 16px Arial";
+    ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung footer
+    ctx.fillText(footerItem, x + 10, y + 30); // Vẽ dữ liệu footer
+  });
+
+  return canvas.toBuffer(); // Trả về buffer ảnh
+}
+
+// hàm vẽ bảng phí
+function createTableImageListExpense(records) {
+  const columns = 3; // Số lượng cột cố định (STT, Tên, Ca, Lai, Khác, Thời gian)
+  const header = ["STT", "CHI TIẾT", "SỐ TIỀN"]; // Tiêu đề của bảng
+  const totals = records.reduce((acc, record) => {
+    acc += record.amount;
+
+    return acc;
+  }, 0);
+
+  // Dữ liệu footer (hiển thị tổng các khoản tiền và thu về)
+  const footer = ["Tổng", "", totals, ""];
+
+  const rows = records.length + 3; // Số hàng: bao gồm tiêu đề + dữ liệu + footer
+
+  const cellWidth = 120;
+  const cellHeight = 50;
+  const canvasWidth = columns * cellWidth;
+  const canvasHeight = rows * cellHeight;
+
+  const canvas = createCanvas(canvasWidth, canvasHeight);
+  const ctx = canvas.getContext("2d");
+
+  // Vẽ nền trắng
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Vẽ tiêu đề "Sổ chi tiết ca"
+  ctx.fillStyle = "#000"; // Màu chữ
+  ctx.font = "18px Arial"; // Cỡ chữ
+  ctx.fillText("Sổ chi phí ngày", canvas.width / 3, 30); // Vẽ tiêu đề
+
+  // Vẽ bảng
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#000"; // Màu chữ
+
+  // Vẽ tiêu đề ở hàng đầu tiên (hàng 0)
+  header.forEach((title, colIndex) => {
+    const x = colIndex * cellWidth;
+    const y = 50; // Hàng đầu tiên
+    ctx.font = "bold 15px Arial";
+    ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung
+    ctx.fillText(title, x + 10, y + 30); // Vẽ tiêu đề
+  });
+
+  // Vẽ dữ liệu từ records (hàng 2 đến hàng cuối cùng)
+  records.forEach((record, rowIndex) => {
+    const data = [
+      (rowIndex + 1).toString(), // Số thứ tự (STT)
+      record.name,
+      record.amount.toLocaleString("vi-VN"),
+    ];
+
+    data.forEach((item, colIndex) => {
+      const x = colIndex * cellWidth;
+      const y = (rowIndex + 2) * cellHeight; // Hàng dữ liệu bắt đầu từ hàng 2
+      ctx.font = "14px Arial";
+      ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung
+      ctx.fillText(item, x + 10, y + 30); // Vẽ dữ liệu
+    });
+  });
+
+  // Vẽ footer ở hàng cuối cùng
+  footer.forEach((footerItem, colIndex) => {
+    const x = colIndex * cellWidth;
+    const y = (rows - 1) * cellHeight; // Hàng cuối cùng
+    ctx.fillStyle = "#FF0000"; // Màu chữ footer
+    ctx.font = "bold 16px Arial";
+    ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung footer
+    ctx.fillText(footerItem, x + 10, y + 30); // Vẽ dữ liệu footer
+  });
+
+  return canvas.toBuffer(); // Trả về buffer ảnh
+}
+
+// Xử lý lệnh /addca
+bot.onText(/\/addca(.*)/, (msg, match) => {
   const chatId = msg.chat.id;
   const msgText = match[0];
 
   // Kiểm tra cú pháp tin nhắn
-  const parsedData = parseAddCommand(msgText);
+  const parsedData = parseAddCaCommand(msgText);
 
   if (!parsedData) {
     // Nếu cú pháp không hợp lệ
     bot.sendMessage(
       chatId,
-      "Cú pháp không hợp lệ. Vui lòng sử dụng: /add <tên> c<số tiền> l<số tiền> k<số tiền>"
+      "Cú pháp không hợp lệ. Vui lòng sử dụng: /addca <tên> c<số tiền> l<số tiền> k<số tiền>"
     );
     return;
   }
@@ -73,12 +390,12 @@ bot.onText(/\/add(.*)/, (msg, match) => {
   // Lấy thời gian hiện tại
   const time = moment().format("HH:mm:ss");
 
-  if (!groupRecords[chatId]) {
-    groupRecords[chatId] = [];
+  if (!groupRecordsCa[chatId]) {
+    groupRecordsCa[chatId] = [];
   }
 
   // Thêm thông tin vào mảng records
-  groupRecords[chatId].push({
+  groupRecordsCa[chatId].push({
     name: parsedData.name,
     ca: parsedData.ca,
     lai: parsedData.lai,
@@ -89,45 +406,118 @@ bot.onText(/\/add(.*)/, (msg, match) => {
   // Phản hồi rằng đã thêm thông tin thành công
   bot.sendMessage(
     chatId,
-    `_Đã thêm:_\n\nTên: ${parsedData.name} \\| Ca: ${parsedData.ca} \\| Lai: ${parsedData.lai} \\| Khác: ${parsedData.khac}`,
+    `_Đã thêm ca thành công\\._\nDùng cú pháp /check để kiểm tra lại thông tin\\.`,
     { parse_mode: "MarkdownV2" }
   );
 });
 
-// Xử lý lệnh /total
+// Xử lý lệnh /addphi
+bot.onText(/\/addphi\s+(.+),(\d+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  const msgText = match.input; // Tin nhắn người dùng gửi
+
+  // Kiểm tra cú pháp
+  const parsedData = parseAddPhiCommand(msgText);
+
+  if (!parsedData) {
+    // Nếu cú pháp không hợp lệ
+    bot.sendMessage(
+      chatId,
+      "Cú pháp không hợp lệ. Vui lòng sử dụng: /addphi <tên chi phí>,<số tiền>"
+    );
+    return;
+  }
+
+  // Nếu chưa có groupRecordsPhi[chatId], khởi tạo mảng rỗng
+  if (!groupRecordsPhi[chatId]) {
+    groupRecordsPhi[chatId] = [];
+  }
+
+  // Kiểm tra xem tên chi phí đã tồn tại chưa
+  const existingRecord = groupRecordsPhi[chatId].find(
+    (record) => record.name === parsedData.name
+  );
+
+  if (existingRecord) {
+    // Nếu chi phí đã tồn tại, tăng amount
+    existingRecord.amount += parsedData.amount;
+  } else {
+    // Nếu chi phí chưa tồn tại, thêm mới
+    groupRecordsPhi[chatId].push({
+      name: parsedData.name,
+      amount: parsedData.amount,
+    });
+  }
+
+  // Phản hồi thông báo đã thêm chi phí thành công
+  bot.sendMessage(
+    chatId,
+    `_Đã thêm chi phí thành công\\._\nDùng cú pháp /check để kiểm tra lại thông tin\\.`,
+    { parse_mode: "MarkdownV2" }
+  );
+});
+
+// Xử lý lệnh /check
 bot.onText(/\/check/, (msg) => {
   const chatId = msg.chat.id;
 
-  if (!groupRecords[chatId] || groupRecords[chatId].length === 0) {
+  // Kiểm tra xem có dữ liệu nào không
+  if (
+    (!groupRecordsCa[chatId] || groupRecordsCa[chatId].length === 0) &&
+    (!groupRecordsPhi[chatId] || groupRecordsPhi[chatId].length === 0)
+  ) {
     bot.sendMessage(chatId, "Hiện chưa có thông tin nào.");
     return;
   }
 
-  // Tạo chuỗi phản hồi chứa toàn bộ thông tin
-  let response = "Thông tin sổ bạn như sau:\n";
-  groupRecords[chatId].forEach((record, index) => {
-    response += `<b>${index + 1}.</b>\n<b>Tên</b> <code>${
-      record.name
-    }</code> | <b>Tiền ca</b> <code>${record.ca.toLocaleString(
-      "vi-VN"
-    )}</code> | <b>Tiền lai</b> <code>${record.lai.toLocaleString(
-      "vi-VN"
-    )}</code> | <b>Tiền khác</b> <code>${record.khac.toLocaleString(
-      "vi-VN"
-    )}</code>\n<b>Thời gian</b> <code>${record.time}</code>\n
-    
-  `;
-  });
+  // Tạo chuỗi phản hồi cho Ca
+  let responseCa = "<b>Thông tin sổ bạn như sau:</b>\n\n";
+  if (!groupRecordsCa[chatId] || groupRecordsCa[chatId].length === 0) {
+    responseCa += `Hiện chưa có thông tin Ca nào.\n`;
+  } else {
+    responseCa += `<b>Số ca</b>\n`;
+    groupRecordsCa[chatId].forEach((record, index) => {
+      responseCa += `<b>${index + 1}.</b> Tên: <code>${
+        record.name
+      }</code> | Tiền Ca: <code>${record.ca.toLocaleString(
+        "vi-VN"
+      )}</code> | Tiền Lai: <code>${record.lai.toLocaleString(
+        "vi-VN"
+      )}</code> | Tiền Khác: <code>${record.khac.toLocaleString(
+        "vi-VN"
+      )}</code>\nThời gian vào sổ: <code>${record.time}</code>\n\n`;
+    });
+  }
+
+  // Tạo chuỗi phản hồi cho Phi
+  let responsePhi = "<b>Chi phí:</b>\n";
+  if (!groupRecordsPhi[chatId] || groupRecordsPhi[chatId].length === 0) {
+    responsePhi += "Hiện chưa có chi phí nào.\n";
+  } else {
+    groupRecordsPhi[chatId].forEach((record, index) => {
+      responsePhi += `<b>${
+        index + 1
+      }.</b> ${record.name.toLocaleString()} | <i>${record.amount.toLocaleString(
+        "vi-VN"
+      )}</i>\n`;
+    });
+  }
+
+  // Gộp phản hồi của cả Ca và Phi
+  const finalResponse = `${responseCa}\n${responsePhi}`;
 
   // Gửi phản hồi lại toàn bộ thông tin
-  bot.sendMessage(chatId, response, { parse_mode: "HTML" });
+  bot.sendMessage(chatId, finalResponse, { parse_mode: "HTML" });
 });
 
-// Xử lý lệnh /check
+//xử lí lệnh /total
 bot.onText(/\/total/, (msg) => {
   const chatId = msg.chat.id;
 
-  if (!groupRecords[chatId] || groupRecords[chatId].length === 0) {
+  if (
+    (!groupRecordsCa[chatId] || groupRecordsCa[chatId].length === 0) &&
+    (!groupRecordsPhi[chatId] || groupRecordsPhi[chatId].length === 0)
+  ) {
     bot.sendMessage(chatId, "Hiện chưa có thông tin nào.");
     return;
   }
@@ -137,14 +527,14 @@ bot.onText(/\/total/, (msg) => {
     totalLai = 0,
     totalKhac = 0;
 
-  groupRecords[chatId].forEach((record) => {
+  groupRecordsCa[chatId]?.forEach((record) => {
     totalCa += record.ca;
     totalLai += record.lai;
     totalKhac += record.khac;
   });
 
   // Phản hồi tổng cộng
-  const response = `<pre>Tổng sổ hiện tại thu về:\n\nCa: ${totalCa.toLocaleString(
+  const responseCa = `1. Tổng sổ hiện tại thu về:\nCa: ${totalCa.toLocaleString(
     "vi-VN"
   )}\nLai: ${totalLai.toLocaleString(
     "vi-VN"
@@ -152,8 +542,51 @@ bot.onText(/\/total/, (msg) => {
     totalCa +
     totalLai +
     totalKhac
-  ).toLocaleString("vi-VN")}</pre>`;
+  ).toLocaleString("vi-VN")}`;
+
+  let total = calculateTotal(groupRecordsPhi[chatId] || []);
+
+  let responsePhi = "2. Tổng chi phí ngày:\n";
+  if (!groupRecordsPhi[chatId] || groupRecordsPhi[chatId].length === 0) {
+    responsePhi += `Hiện chưa có chi phí.\n`;
+    total = 0;
+  } else {
+    groupRecordsPhi[chatId].forEach((record) => {
+      responsePhi += `${record.name}: ${record.amount.toLocaleString(
+        "vi-VN"
+      )}\n`;
+    });
+    responsePhi += `TC = ${total.toLocaleString("vi-VN")}`;
+  }
+
+  // Tính toán tổng cuối ngày
+  const responseTotal = (totalCa + totalLai + totalKhac - total).toLocaleString(
+    "vi-VN"
+  );
+
+  const response = `<pre>${responseCa}\n\n${responsePhi}\n\n**Tổng sổ cuối ngày: ${responseTotal}</pre>`;
+
   bot.sendMessage(chatId, response, { parse_mode: "HTML" });
+});
+//Lệnh img để xuất ảnh
+bot.onText(/\/img/, (msg) => {
+  const chatId = msg.chat.id;
+
+  // Kiểm tra dữ liệu ca (SeaFood)
+  if (!groupRecordsCa[chatId] || groupRecordsCa[chatId].length === 0) {
+    bot.sendMessage(chatId, "Hiện chưa có thông tin ca nào.");
+  } else {
+    const imageBuffer = createTableImageListSeaFood(groupRecordsCa[chatId]);
+    bot.sendPhoto(chatId, imageBuffer);
+  }
+
+  // Kiểm tra dữ liệu chi phí (Expense)
+  if (!groupRecordsPhi[chatId] || groupRecordsPhi[chatId].length === 0) {
+    bot.sendMessage(chatId, "Hiện chưa có thông tin chi phí nào.");
+  } else {
+    const imageBufferCur = createTableImageListExpense(groupRecordsPhi[chatId]);
+    bot.sendPhoto(chatId, imageBufferCur);
+  }
 });
 
 // Lệnh /start để khởi động bot
@@ -161,7 +594,7 @@ bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
   bot.sendMessage(
     chatId,
-    `Chào mừng bạn!\nDùng cú pháp /add <b>[tên] c[số tiền] l[số tiền] k[số tiền]</b> để thêm thông tin.\nDùng cú pháp /total để xem tổng số tiền sổ hiện tai.\nDùng cú pháp /check để kiểm tra danh sách ca hiện tai\n\nVí dụ : <code>/add at c3000 l300 k1500</code>\n\nTương ứng :\n<i>Khách : AT , Tiền ca : 3000 , Tiền lai 300 , tiền khác 1500</i>
+    `Chào mừng bạn!\nDùng cú pháp /addca <b>[tên] c[số tiền] l[số tiền] k[số tiền]</b> để thêm thông tin ca.\n  **Ví dụ : <code>/addca at c3000 l300 k1500</code>\n  **Tương ứng : <i>Khách : AT , Tiền ca : 3000 , Tiền lai 300 , tiền khác 1500</i>\n\nDùng cú pháp /addphi <b>[thông tin phí],[số tiền]</b> để thêm thông tin chi phí ngày.\n  **Ví dụ : <code>/addphi mua cơm,600</code>\n  **Tương ứng : <i>Mua cơm , số tiền : 300</i>\n\nDùng cú pháp /check để kiểm tra danh sách ca và chi phí hiện tại.\nDùng cú pháp /total để xem tổng số tiền sổ hiện tai.\nDùng cú pháp /img để xuất ra báo cáo bằng hình ảnh.
     `,
     {
       parse_mode: "HTML",
@@ -172,11 +605,13 @@ bot.onText(/\/start/, (msg) => {
 bot.onText(/\/clear/, (msg) => {
   const chatId = msg.chat.id;
 
-  groupRecords[chatId] = [];
+  groupRecordsCa[chatId] = [];
 
   bot.sendMessage(chatId, `<i>Sổ của bạn đã được xóa</i>`, {
     parse_mode: "HTML",
   });
 });
 
-bot.setWebHook(`https://still-lake-11391-4452ebd5c0cc.herokuapp.com/${token}`);
+bot.setWebHook(
+  `https://telegram-bot-seafood-app-3e45e316bf10.herokuapp.com/${token}`
+);
