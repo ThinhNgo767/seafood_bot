@@ -388,7 +388,9 @@ bot.onText(/\/addca(.*)/, (msg, match) => {
 
   // Lấy thời gian hiện tại
   const now = new Date();
-  const time = now.toLocaleTimeString("vi-VN");
+  const time = now.toLocaleTimeString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
 
   if (!groupRecordsCa[chatId]) {
     groupRecordsCa[chatId] = [];
