@@ -2,11 +2,13 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const TelegramBot = require("node-telegram-bot-api");
 require("dotenv").config();
+const fs = require("fs");
 const { createCanvas } = require("canvas");
 
 const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, { webHook: true });
 
+// const bot = new TelegramBot(token, { polling: true });
 const app = express();
 app.use(bodyParser.json());
 
@@ -27,6 +29,7 @@ app.listen(PORT, () => {
 
 const commands = [
   { command: "start", description: "Bắt đầu sử dụng bot" },
+  { command: "help", description: "Xem hướng dẫn sử dụng bot" },
   { command: "check", description: "Xem danh sách ca và chi phí đã lưu" },
   { command: "total", description: "Xem tổng số tiền sổ thu chi hiện tại" },
   { command: "img", description: "Xuất thông tin ca và chi phí thành ảnh" },
@@ -242,9 +245,15 @@ function createTableImageListSeaFood(records) {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // Vẽ tiêu đề "Sổ chi tiết ca"
+  const totalCa = (
+    Number(totals.ca) +
+    Number(totals.lai) +
+    Number(totals.khac)
+  ).toLocaleString("vi-VN");
+
   ctx.fillStyle = "#000"; // Màu chữ
   ctx.font = "18px Arial"; // Cỡ chữ
-  ctx.fillText("Sổ chi tiết ca", canvas.width / 2, 30); // Vẽ tiêu đề
+  ctx.fillText(`Sổ chi tiết ca | TC: ${totalCa}`, canvas.width / 3, 30); // Vẽ tiêu đề
 
   // Vẽ bảng
   ctx.strokeStyle = "#000";
@@ -274,7 +283,7 @@ function createTableImageListSeaFood(records) {
     data.forEach((item, colIndex) => {
       const x = colIndex * cellWidth;
       const y = (rowIndex + 2) * cellHeight; // Hàng dữ liệu bắt đầu từ hàng 2
-      ctx.font = "14px Arial";
+      ctx.font = "15px Arial";
       ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung
       ctx.fillText(item, x + 10, y + 30); // Vẽ dữ liệu
     });
@@ -572,8 +581,8 @@ bot.onText(/\/total/, (msg) => {
 });
 //Lệnh img để xuất ảnh
 bot.onText(/\/img/, (msg) => {
+  process.emitWarning = () => {};
   const chatId = msg.chat.id;
-
   // Kiểm tra dữ liệu ca (SeaFood)
   if (!groupRecordsCa[chatId] || groupRecordsCa[chatId].length === 0) {
     bot.sendMessage(chatId, "Hiện chưa có thông tin ca nào.");
@@ -594,25 +603,69 @@ bot.onText(/\/img/, (msg) => {
 // Lệnh /start để khởi động bot
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
+  const userName = msg.from.first_name || "Người dùng";
   bot.sendMessage(
     chatId,
-    `Chào mừng bạn!\nDùng cú pháp /addca <b>[tên] c[số tiền] l[số tiền] k[số tiền]</b> để thêm thông tin ca.\n  **Ví dụ : <code>/addca at c3000 l300 k1500</code>\n  **Tương ứng : <i>Khách : AT , Tiền ca : 3000 , Tiền lai 300 , tiền khác 1500</i>\n\nDùng cú pháp /addphi <b>[thông tin phí],[số tiền]</b> để thêm thông tin chi phí ngày.\n  **Ví dụ : <code>/addphi mua cơm,600</code>\n  **Tương ứng : <i>Mua cơm , số tiền : 300</i>\n\nDùng cú pháp /check để kiểm tra danh sách ca và chi phí hiện tại.\nDùng cú pháp /total để xem tổng số tiền sổ hiện tai.\nDùng cú pháp /img để xuất ra báo cáo bằng hình ảnh.
-    `,
+    `Chào mừng bạn! <b>${userName}</b>\n\nNếu bạn chưa biết cách sử dụng Bot hãy dùng cú pháp /help để xem hướng dẫn sử dụng.\n\n<b>Cú pháp thêm</b>\n<code>/addca </code>\n<code>/addphi </code>`,
     {
       parse_mode: "HTML",
     }
   );
 });
 
+bot.onText(/\/help/, (msg) => {
+  process.emitWarning = () => {};
+  const chatId = msg.chat.id;
+  const filePath = "./images/help.png";
+  bot.sendPhoto(chatId, fs.createReadStream(filePath));
+});
+
 bot.onText(/\/clear/, (msg) => {
   const chatId = msg.chat.id;
+  const keyboard = [
+    [
+      {
+        text: "Xác nhận",
+        callback_data: `confirm`,
+      },
+      {
+        text: "Hủy bỏ",
+        callback_data: `cancel`,
+      },
+    ],
+  ];
 
-  groupRecordsCa[chatId] = [];
-  groupRecordsPhi[chatId] = [];
+  bot.sendMessage(
+    chatId,
+    `<b>Bạn có muốn xóa sổ đã lưu?</b>\n<i>Lưu ý: Bạn sẽ không phục hồi được báo cáo khi bấm xác nhận xóa.</i>`,
+    {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: keyboard },
+    }
+  );
+});
 
-  bot.sendMessage(chatId, `<i>Sổ của bạn đã được xóa</i>`, {
-    parse_mode: "HTML",
-  });
+bot.on("callback_query", async (callbackQuery) => {
+  const msg = callbackQuery.message; // Lấy message từ callbackQuery
+  const chatId = msg.chat.id; // Lấy chatId từ message
+  const data = callbackQuery.data; // Lấy callback_data
+  const action = data; // Không cần destructuring
+
+  if (action === "confirm") {
+    // Xóa dữ liệu
+    groupRecordsCa[chatId] = [];
+    groupRecordsPhi[chatId] = [];
+    bot.deleteMessage(chatId, msg.message_id);
+    bot.sendMessage(chatId, `<i>Đã xóa báo cáo!</i>`, {
+      parse_mode: "HTML",
+    });
+  } else if (action === "cancel") {
+    // Xóa message xác nhận khi người dùng chọn "Hủy bỏ"
+    bot.deleteMessage(chatId, msg.message_id);
+    bot.sendMessage(chatId, `<i>Đã hủy hành động xóa!</i>`, {
+      parse_mode: "HTML",
+    });
+  }
 });
 
 bot.setWebHook(
