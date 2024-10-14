@@ -6,9 +6,9 @@ const fs = require("fs");
 const { createCanvas } = require("canvas");
 
 const token = process.env.BOT_TOKEN;
-const bot = new TelegramBot(token, { webHook: true });
+// const bot = new TelegramBot(token, { webHook: true });
 
-// const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(token, { polling: true });
 const app = express();
 app.use(bodyParser.json());
 
@@ -92,112 +92,7 @@ const calculateTotal = (records) => {
   });
   return total;
 };
-// hàm vẽ bảng ca
-// function createTableImageListSeaFood(records) {
-//   const columns = 6; // Số lượng cột cố định (STT, Tên, Ca, Lai, Khác, Thời gian)
-//   const header = [
-//     "STT",
-//     "TÊN",
-//     "TIỀN CA",
-//     "TIỀN LAI",
-//     "TIỀN KHÁC",
-//     "GIỜ VÀO SỔ",
-//   ]; // Tiêu đề của bảng
-//   const totals = records.reduce(
-//     (acc, record) => {
-//       acc.ca += record.ca;
-//       acc.lai += record.lai;
-//       acc.khac += record.khac;
-//       return acc;
-//     },
-//     { ca: 0, lai: 0, khac: 0 }
-//   );
-//   const footer = [
-//     "Tổng",
-//     ,
-//     totals.ca.toLocaleString("vi-VN"),
-//     totals.lai.toLocaleString("vi-VN"),
-//     totals.khac.toLocaleString("vi-VN"),
-//     "",
-//   ]; // Dữ liệu footer (có thể thêm tổng ở đây)
-//   const rows = records.length + 3; // Số hàng: bao gồm tiêu đề + dữ liệu + footer
 
-//   const cellWidth = 120;
-//   const cellHeight = 50;
-//   const canvasWidth = columns * cellWidth;
-//   const canvasHeight = rows * cellHeight;
-
-//   const canvas = createCanvas(canvasWidth, canvasHeight);
-//   const ctx = canvas.getContext("2d");
-
-//   // Vẽ nền
-//   ctx.fillStyle = "#fff";
-//   ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-//   // Vẽ tiêu đề "Chi phí"
-//   ctx.fillStyle = "#000"; // Màu chữ
-//   ctx.font = "18px Arial"; // Cỡ chữ
-//   ctx.fillText("Sổ chi tiết ca", canvas.width / 2, 30);
-
-//   // Vẽ cuối dưới footer
-//   ctx.fillStyle = "#000"; // Màu chữ
-//   ctx.font = "18px Arial"; // Cỡ chữ
-//   ctx.fillText(
-//     `Thu về : ${
-//       totals.ca.toLocaleString("vi-VN") +
-//       totals.lai.toLocaleString("vi-VN") +
-//       totals.khac.toLocaleString("vi-VN")
-//     }, `,
-//     canvas.width / 2,
-//     30
-//   );
-
-//   // Vẽ bảng
-//   ctx.strokeStyle = "#000";
-//   ctx.lineWidth = 1;
-//   ctx.fillStyle = "#000"; // Màu chữ
-
-//   // Vẽ tiêu đề ở hàng đầu tiên (hàng 0)
-//   header.forEach((title, colIndex) => {
-//     const x = colIndex * cellWidth;
-//     const y = 50; // Hàng đầu tiên
-//     ctx.font = "bold 15px Arial";
-//     ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung
-//     ctx.fillText(title, x + 10, y + 30); // Vẽ tiêu đề
-//   });
-
-//   // Vẽ dữ liệu từ records
-//   records.forEach((record, rowIndex) => {
-//     const data = [
-//       (rowIndex + 1).toString(), // Số thứ tự (STT)
-//       record.name,
-//       record.ca.toLocaleString("vi-VN"),
-//       record.lai.toLocaleString("vi-VN"),
-//       record.khac.toLocaleString("vi-VN"),
-//       record.time,
-//     ];
-
-//     data.forEach((item, colIndex) => {
-//       const x = colIndex * cellWidth;
-//       const y = (rowIndex + 2) * cellHeight; // Hàng dữ liệu bắt đầu từ hàng 1
-//       ctx.font = "14px Arial";
-//       ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung
-//       ctx.fillText(item, x + 10, y + 30); // Vẽ dữ liệu
-//     });
-//   });
-
-//   // Vẽ footer ở hàng cuối cùng
-//   footer.forEach((footerItem, colIndex) => {
-//     const x = colIndex * cellWidth;
-//     const y = (rows - 1) * cellHeight; // Hàng cuối cùng
-//     ctx.fillStyle = "#FF0000";
-//     ctx.font = "bold 16px Arial";
-//     ctx.strokeRect(x, y, cellWidth, cellHeight); // Vẽ khung
-//     ctx.fillText(footerItem, x + 10, y + 30); // Vẽ dữ liệu footer
-//   });
-
-//   return canvas.toBuffer(); // Trả về buffer ảnh
-// }
 function createTableImageListSeaFood(records) {
   const columns = 6; // Số lượng cột cố định (STT, Tên, Ca, Lai, Khác, Thời gian)
   const header = [
@@ -301,7 +196,6 @@ function createTableImageListSeaFood(records) {
 
   return canvas.toBuffer(); // Trả về buffer ảnh
 }
-
 // hàm vẽ bảng phí
 function createTableImageListExpense(records) {
   const columns = 3; // Số lượng cột cố định (STT, Tên, Ca, Lai, Khác, Thời gian)
@@ -377,15 +271,6 @@ function createTableImageListExpense(records) {
 
   return canvas.toBuffer(); // Trả về buffer ảnh
 }
-
-bot.onText(/\@seafood_accountant_bot/, (msg) => {
-  const chatId = msg.chat.id;
-  const userName = msg.from.first_name || "Người dùng";
-  const welcomeMessage = `\nCái lề gì thốn *${userName}*\\? bố mày đây\\.\nChú em mày gọi anh có gì không nào? nói đi\\! `;
-  bot.sendMessage(chatId, welcomeMessage, {
-    parse_mode: "MarkdownV2",
-  });
-});
 
 bot.on("message", (msg) => {
   const chatId = msg.chat.id;
