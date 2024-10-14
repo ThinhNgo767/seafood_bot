@@ -6,9 +6,9 @@ const fs = require("fs");
 const { createCanvas } = require("canvas");
 
 const token = process.env.BOT_TOKEN;
-// const bot = new TelegramBot(token, { webHook: true });
+const bot = new TelegramBot(token, { webHook: true });
 
-const bot = new TelegramBot(token, { polling: true });
+// const bot = new TelegramBot(token, { polling: true });
 const app = express();
 app.use(bodyParser.json());
 
@@ -385,6 +385,21 @@ bot.onText(/\@seafood_accountant_bot/, (msg) => {
   bot.sendMessage(chatId, welcomeMessage, {
     parse_mode: "MarkdownV2",
   });
+});
+
+bot.on("message", (msg) => {
+  const chatId = msg.chat.id;
+  const messageText = msg.text.trim();
+  const userName = msg.from.first_name || "Người dùng";
+  // Kiểm tra nếu tin nhắn chỉ là "@seafood_accountant_bot"
+  if (messageText === "@seafood_accountant_bot") {
+    const welcomeMessage = `\nCái lề gì thốn *${userName}*\\? bố mày đây\\.\nChú em mày gọi anh có gì không nào? nói đi\\! `;
+    bot.sendMessage(chatId, welcomeMessage, {
+      parse_mode: "MarkdownV2",
+    });
+  } else {
+    return;
+  }
 });
 
 // Xử lý lệnh /addca
