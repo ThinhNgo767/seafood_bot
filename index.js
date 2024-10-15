@@ -6,27 +6,13 @@ const fs = require("fs");
 const { createCanvas } = require("canvas");
 
 const token = process.env.BOT_TOKEN;
+
 // const bot = new TelegramBot(token, { webHook: true });
 
-const bot = new TelegramBot(token, { polling: true });
-const app = express();
-app.use(bodyParser.json());
+// const bot = new TelegramBot(token, { polling: true });
 
-app.get(`/${token}`, (req, res) => {
-  res.send(`6789`);
-});
-
-app.post(`/${token}`, (req, res) => {
-  console.log("Webhook received:", req.body);
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
-
+let bot;
+// Kiểm tra trạng thái WebHook và khởi động bot
 const commands = [
   { command: "start", description: "Bắt đầu sử dụng bot" },
   { command: "help", description: "Xem hướng dẫn sử dụng bot" },
@@ -45,7 +31,52 @@ async function setCommands() {
   }
 }
 
-setCommands();
+function startBot() {
+  try {
+    const url = "https://telegram-bot-seafood-app-3e45e316bf10.herokuapp.com";
+
+    // Khởi tạo bot với WebHook
+    bot = new TelegramBot(token, { webHook: true });
+    bot.setWebHook(`${url}/${token}`);
+
+    const app = express();
+    app.use(bodyParser.json());
+
+    app.get(`/${token}`, (req, res) => {
+      res.send(`Hải sản thật là ngon`);
+    });
+
+    app.post(`/${token}`, (req, res) => {
+      console.log("Webhook received:", req.body);
+      bot.processUpdate(req.body);
+      res.sendStatus(200);
+    });
+
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+
+    console.log("Bot đang chạy với WebHook");
+    setCommands();
+  } catch (error) {
+    console.error("Lỗi WebHook:", error);
+    switchToPolling();
+  }
+}
+
+function switchToPolling() {
+  bot = new TelegramBot(token, { polling: true });
+
+  bot.on("message", (msg) => {
+    const chatId = msg.chat.id;
+    bot.sendMessage(chatId, "Bot đang chạy với Polling");
+  });
+
+  console.log("Bot đang chạy với Polling");
+  setCommands();
+}
+startBot();
 
 let groupRecordsCa = {};
 let groupRecordsPhi = {};
@@ -591,6 +622,6 @@ bot.on("callback_query", async (callbackQuery) => {
   }
 });
 
-bot.setWebHook(
-  `https://telegram-bot-seafood-app-3e45e316bf10.herokuapp.com/${token}`
-);
+// bot.setWebHook(
+//   `https://telegram-bot-seafood-app-3e45e316bf10.herokuapp.com/${token}`
+// );
